@@ -616,6 +616,7 @@ def rustc_compile_action(
         executable = ctx.executable._process_wrapper_worker,
         inputs = compile_inputs,
         outputs = [crate_info.output],
+        tools = [ctx.executable._process_wrapper],
         env = env,
         arguments = [ctx.executable._process_wrapper.path, args],
         mnemonic = "Rustc",
