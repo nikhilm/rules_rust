@@ -432,6 +432,8 @@ def construct_arguments(
 
     # Wrapper args first
     args = ctx.actions.args()
+    args.set_param_file_format("multiline")
+    args.use_param_file("@%s", use_always=True)
 
     if build_env_file != None:
         args.add("--env-file", build_env_file)
@@ -611,12 +613,13 @@ def rustc_compile_action(
         formatted_version = ""
 
     ctx.actions.run(
-        executable = ctx.executable._process_wrapper,
+        executable = ctx.executable._process_wrapper_worker,
         inputs = compile_inputs,
         outputs = [crate_info.output],
         env = env,
-        arguments = [args],
+        arguments = [ctx.executable._process_wrapper.path, args],
         mnemonic = "Rustc",
+        execution_requirements = { "supports-workers": "1" },
         progress_message = "Compiling Rust {} {}{} ({} files)".format(
             crate_info.type,
             ctx.label.name,

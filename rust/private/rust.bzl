@@ -454,6 +454,13 @@ _rust_common_attrs = {
         allow_single_file = True,
         cfg = "exec",
     ),
+    "_process_wrapper_worker": attr.label(
+        default = "@rustc_worker//file",
+        # Actually we may want the persistent worker to be built by the rust rules themselves, but right now we are just going to use a binary.
+        executable = True,
+        allow_single_file = True,
+        cfg = "exec",
+    ),
 }
 
 _rust_library_attrs = {
