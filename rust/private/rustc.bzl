@@ -317,6 +317,9 @@ def construct_arguments(
     args = ctx.actions.args()
     args.set_param_file_format("multiline")
     args.use_param_file("@%s", use_always=True)
+    # Pass the actual executable as an arg to the worker.
+    # TODO: This is also used by clippy, so do the relevant gating later.
+    args.add("--program_path", ctx.executable._process_wrapper)
 
     if build_env_file != None:
         args.add("--env-file", build_env_file)
@@ -490,7 +493,7 @@ def rustc_compile_action(
         inputs = compile_inputs,
         outputs = [crate_info.output],
         env = env,
-        arguments = [ctx.executable._process_wrapper.path, args],
+        arguments = [args],
         mnemonic = "Rustc",
         execution_requirements = { "supports-workers": "1" },
         progress_message = "Compiling Rust {} {}{} ({} files)".format(
