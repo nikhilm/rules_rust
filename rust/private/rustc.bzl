@@ -370,9 +370,6 @@ def construct_arguments(
     args.add("--crate-name=" + crate_info.name)
     args.add("--crate-type=" + crate_info.type)
 
-    # Enable incremental compilation.
-    args.add("--codegen=incremental=incremental/")
-
     # Mangle symbols to disambiguate crates with the same name
     extra_filename = "-" + output_hash if output_hash else ""
     args.add("--codegen=metadata=" + extra_filename)
