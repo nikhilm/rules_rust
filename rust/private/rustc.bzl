@@ -491,7 +491,7 @@ def rustc_compile_action(
         outputs = [crate_info.output],
         tools = [ctx.executable._process_wrapper],
         env = env,
-        arguments = [ctx.executable._process_wrapper.path, args],
+        arguments = [ctx.executable._process_wrapper.path, ctx.workspace_name, args],
         mnemonic = "Rustc",
         execution_requirements = { "supports-workers": "1" },
         progress_message = "Compiling Rust {} {}{} ({} files)".format(
