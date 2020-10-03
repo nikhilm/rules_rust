@@ -17,7 +17,7 @@ licenses([
 
 load(
     "@io_bazel_rules_rust//rust:rust.bzl",
-    "rust_library",
+    "rust_no_worker_library",
     "rust_binary",
     "rust_test",
 )
@@ -25,7 +25,7 @@ load(
 
 # Unsupported target "bytes" with type "bench" omitted
 
-rust_library(
+rust_no_worker_library(
     name = "bytes",
     crate_root = "src/lib.rs",
     crate_type = "lib",

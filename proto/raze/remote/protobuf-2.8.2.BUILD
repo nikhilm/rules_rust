@@ -17,7 +17,7 @@ licenses([
 
 load(
     "@io_bazel_rules_rust//rust:rust.bzl",
-    "rust_library",
+    "rust_no_worker_library",
     "rust_binary",
     "rust_test",
 )
@@ -27,7 +27,7 @@ load(
 # Unsupported target "coded_input_stream" with type "bench" omitted
 # Unsupported target "coded_output_stream" with type "bench" omitted
 
-rust_library(
+rust_no_worker_library(
     name = "protobuf",
     crate_root = "src/lib.rs",
     crate_type = "lib",

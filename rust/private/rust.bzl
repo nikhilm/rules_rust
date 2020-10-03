@@ -364,17 +364,15 @@ _rust_common_attrs = {
         ],
     ),
     "_cc_toolchain": attr.label(default = "@bazel_tools//tools/cpp:current_cc_toolchain"),
+    "_use_worker": attr.bool(default = False),
     "_process_wrapper": attr.label(
         default = "@io_bazel_rules_rust//util/process_wrapper",
         executable = True,
         allow_single_file = True,
         cfg = "exec",
     ),
-    "_process_wrapper_worker": attr.label(
-        default = "@rustc_worker//file",
-        # Actually we may want the persistent worker to be built by the rust rules themselves, but right now we are just going to use a binary.
+    "process_wrapper_worker": attr.label(
         executable = True,
-        allow_single_file = True,
         cfg = "exec",
     ),
 }
@@ -403,7 +401,7 @@ _rust_test_attrs = {
     ),
 }
 
-rust_library = rule(
+rust_no_worker_library = rule(
     _rust_library_impl,
     attrs = dict(_rust_common_attrs.items() +
                  _rust_library_attrs.items()),
@@ -479,6 +477,14 @@ INFO: Elapsed time: 1.245s, Critical Path: 1.01s
 """,
 )
 
+def rust_library(**kwargs):
+    # Discard
+    _ = kwargs.pop("process_wrapper_worker", None)
+    rust_no_worker_library(
+        process_wrapper_worker = Label("//worker:rustc-worker"),
+        **kwargs,
+    )
+
 _rust_binary_attrs = {
     "linker_script": attr.label(
         doc = _tidy("""
@@ -493,7 +499,7 @@ _rust_binary_attrs = {
     "out_binary": attr.bool(),
 }
 
-rust_binary = rule(
+rust_no_worker_binary = rule(
     _rust_binary_impl,
     attrs = dict(_rust_common_attrs.items() + _rust_binary_attrs.items()),
     executable = True,
@@ -588,6 +594,14 @@ Hello world
 ```
 """,
 )
+
+def rust_binary(**kwargs):
+    # Discard
+    _ = kwargs.pop("process_wrapper_worker", None)
+    rust_no_worker_binary(
+        process_wrapper_worker = Label("//worker:rustc-worker"),
+        **kwargs,
+    )
 
 rust_test = rule(
     _rust_test_impl,

@@ -313,10 +313,12 @@ def construct_arguments(
 
     env = _get_rustc_env(ctx, toolchain)
 
+    using_worker = ctx.executable.process_wrapper_worker != None
     # Wrapper args first
     args = ctx.actions.args()
-    args.set_param_file_format("multiline")
-    args.use_param_file("@%s", use_always=True)
+    if using_worker:
+        args.set_param_file_format("multiline")
+        args.use_param_file("@%s", use_always=True)
 
     if build_env_file != None:
         args.add("--env-file", build_env_file)
@@ -485,15 +487,28 @@ def rustc_compile_action(
     else:
         formatted_version = ""
 
+    worker_exe = ctx.executable.process_wrapper_worker
+
+    if worker_exe != None:
+        run_exe = worker_exe
+        execution_requirements = { "supports-workers": "1" }
+        run_args = [ctx.executable._process_wrapper.path, toolchain.rustc.path, ctx.var["COMPILATION_MODE"], args]
+        tools = [ctx.executable._process_wrapper]
+    else:
+        run_exe = ctx.executable._process_wrapper
+        run_args = [args]
+        execution_requirements = {}
+        tools = []
+
     ctx.actions.run(
-        executable = ctx.executable._process_wrapper_worker,
+        executable = run_exe,
         inputs = compile_inputs,
         outputs = [crate_info.output],
-        tools = [ctx.executable._process_wrapper],
+        tools = tools,
         env = env,
-        arguments = [ctx.executable._process_wrapper.path, toolchain.rustc.path, ctx.var["COMPILATION_MODE"], args],
+        arguments = run_args,
         mnemonic = "Rustc",
-        execution_requirements = { "supports-workers": "1" },
+        execution_requirements = execution_requirements,
         progress_message = "Compiling Rust {} {}{} ({} files)".format(
             crate_info.type,
             ctx.label.name,

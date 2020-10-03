@@ -19,6 +19,8 @@ load(
     _rust_library = "rust_library",
     _rust_test = "rust_test",
     _rust_test_binary = "rust_test_binary",
+    _rust_no_worker_library = "rust_no_worker_library",
+    _rust_no_worker_binary = "rust_no_worker_binary",
 )
 load(
     "@io_bazel_rules_rust//rust:private/rustdoc.bzl",
@@ -60,3 +62,6 @@ rust_clippy_aspect = _rust_clippy_aspect
 
 rust_clippy = _rust_clippy
 """ See @io_bazel_rules_rust//rust:private/clippy.bzl for a complete description. """
+
+rust_no_worker_library = _rust_no_worker_library
+rust_no_worker_binary = _rust_no_worker_binary
