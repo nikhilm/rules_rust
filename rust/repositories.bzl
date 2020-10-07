@@ -2,6 +2,7 @@
 load(":known_shas.bzl", "FILE_KEY_TO_SHA")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "maybe")
+load("//worker:repositories.bzl", "rust_worker_repositories")
 load(
     "//rust/platform:triple_mappings.bzl",
     "system_to_binary_ext",
@@ -117,6 +118,8 @@ def rust_repositories(
         sha256s = sha256s,
         edition = edition,
     )
+
+    rust_worker_repositories()
 
 def _check_version_valid(version, iso_date, param_prefix = ""):
     """Verifies that the provided rust version and iso_date make sense."""

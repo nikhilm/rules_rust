@@ -400,7 +400,8 @@ def construct_arguments(
         out_dir,
         build_env_file,
         build_flags_files,
-        maker_path = None):
+        maker_path,
+        use_worker=False):
     """Builds an Args object containing common rustc flags
 
     Args:
@@ -432,8 +433,10 @@ def construct_arguments(
 
     # Wrapper args first
     args = ctx.actions.args()
-    args.set_param_file_format("multiline")
-    args.use_param_file("@%s", use_always=True)
+    if use_worker:
+        # Write the args to a param file that will be used by Bazel to send messages to the worker.
+        args.set_param_file_format("multiline")
+        args.use_param_file("@%s", use_always=True)
 
     if build_env_file != None:
         args.add("--env-file", build_env_file)
@@ -571,6 +574,8 @@ def rustc_compile_action(
             - (DepInfo): The transitive dependencies of this crate.
             - (DefaultInfo): The output file for this crate, and its runfiles.
     """
+    worker_binary = ctx.toolchains["@io_bazel_rules_rust//worker:toolchain_type"].worker_binary
+
     dep_info, build_info = collect_deps(
         ctx.label,
         crate_info.deps,
@@ -605,6 +610,7 @@ def rustc_compile_action(
         out_dir,
         build_env_file,
         build_flags_files,
+        use_worker = worker_binary != None,
     )
 
     if hasattr(ctx.attr, "version") and ctx.attr.version != "0.0.0":
@@ -612,15 +618,28 @@ def rustc_compile_action(
     else:
         formatted_version = ""
 
+    if worker_binary != None:
+        executable = worker_binary
+        tools = [ctx.executable._process_wrapper]
+        arguments = [ctx.executable._process_wrapper.path, toolchain.rustc.path, ctx.var["COMPILATION_MODE"], args]
+        execution_requirements = { "supports-workers": "1" }
+    else:
+        # Not all execution platforms support a worker.
+        executable = ctx.executable._process_wrapper
+        tools = []
+        arguments = [args]
+        execution_requirements = {}
+    # TODO: Select if worker is to be enabled.
+
     ctx.actions.run(
-        executable = ctx.executable._process_wrapper_worker,
+        executable = executable,
         inputs = compile_inputs,
         outputs = [crate_info.output],
-        tools = [ctx.executable._process_wrapper],
+        tools = tools,
         env = env,
-        arguments = [ctx.executable._process_wrapper.path, toolchain.rustc.path, ctx.var["COMPILATION_MODE"], args],
+        arguments = arguments,
         mnemonic = "Rustc",
-        execution_requirements = { "supports-workers": "1" },
+        execution_requirements = execution_requirements,
         progress_message = "Compiling Rust {} {}{} ({} files)".format(
             crate_info.type,
             ctx.label.name,
