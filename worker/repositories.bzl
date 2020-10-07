@@ -10,5 +10,4 @@ def rust_worker_repositories():
 
     native.register_toolchains(
         "@io_bazel_rules_rust//worker:linux_x86_64",
-        "@io_bazel_rules_rust//worker:dummy",
     )
