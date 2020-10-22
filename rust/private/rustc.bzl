@@ -629,7 +629,6 @@ def rustc_compile_action(
         tools = []
         arguments = [args]
         execution_requirements = {}
-    # TODO: Select if worker is to be enabled.
 
     ctx.actions.run(
         executable = executable,
