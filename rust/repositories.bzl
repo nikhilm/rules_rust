@@ -2,7 +2,7 @@
 load(":known_shas.bzl", "FILE_KEY_TO_SHA")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "maybe")
-load("//worker:repositories.bzl", "rust_worker_repositories")
+load("//worker:repositories.bzl", "rust_worker_repositories", "rust_worker_toolchains")
 load(
     "//rust/platform:triple_mappings.bzl",
     "system_to_binary_ext",
@@ -121,12 +121,15 @@ def rust_repositories(
         edition = edition,
     )
 
-    if use_worker:
-        rust_worker_repositories()
+    rust_worker_repositories()
+
     # Register a fallback for when workers are not enabled or not available for the execution platform.
     native.register_toolchains(
         "@io_bazel_rules_rust//worker:dummy",
     )
+    # Register the real toolchains.
+    if use_worker:
+        rust_worker_toolchains()
 
 def _check_version_valid(version, iso_date, param_prefix = ""):
     """Verifies that the provided rust version and iso_date make sense."""

@@ -8,6 +8,7 @@ def rust_worker_repositories():
         urls = ["https://github.com/nikhilm/rustc-worker/releases/download/v0.2.0/rustc-worker-linux_x86_64"],
     )
 
+def rust_worker_toolchains():
     native.register_toolchains(
         "@io_bazel_rules_rust//worker:linux_x86_64",
     )
