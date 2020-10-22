@@ -126,6 +126,7 @@ def rust_repositories(
     # Register the real toolchains.
     if use_worker:
         rust_worker_toolchains()
+
     # Register a fallback for when workers are not enabled or not available for the execution platform.
     native.register_toolchains(
         "@io_bazel_rules_rust//worker:dummy",
