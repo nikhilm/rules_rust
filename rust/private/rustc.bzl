@@ -400,7 +400,7 @@ def construct_arguments(
         out_dir,
         build_env_file,
         build_flags_files,
-        maker_path,
+        maker_path=None,
         use_worker=False):
     """Builds an Args object containing common rustc flags
 
@@ -419,6 +419,7 @@ def construct_arguments(
         build_env_file (str): The output file of a `cargo_build_script` action containing rustc environment variables
         build_flags_files (list): The output files of a `cargo_build_script` actions containing rustc build flags
         maker_path (File): An optional clippy marker file
+        use_worker (bool): If True, sets up the arguments in a worker-compatible fashion
 
     Returns:
         tuple: A tuple of the following items

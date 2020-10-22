@@ -49,7 +49,7 @@ def rust_repositories(
         edition: The rust edition to be used by default (2015 (default) or 2018)
         dev_components: Whether to download the rustc-dev components (defaults to False). Requires version to be "nightly".
         sha256s: A dict associating tool subdirectories to sha256 hashes.
-      use_worker: boolean. Set to True to use Bazel workers for Rust. This downloads binaries for https://github.com/nikhilm/rustc-worker.
+        use_worker: boolean. Set to True to use Bazel workers for Rust. This downloads binaries for https://github.com/nikhilm/rustc-worker.
     """
 
     if dev_components and version != "nightly":
