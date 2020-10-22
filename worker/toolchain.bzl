@@ -1,3 +1,4 @@
+# buildifier: disable=module-docstring
 def _worker_toolchain_impl(ctx):
     toolchain_info = platform_common.ToolchainInfo(
         worker_binary = ctx.executable.worker_binary,
