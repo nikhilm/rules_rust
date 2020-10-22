@@ -1,4 +1,16 @@
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 load("//worker:toolchain.bzl", "worker_toolchain")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "repositories.bzl",
+])
+
+bzl_library(
+    name = "rules",
+    srcs = glob(["**/*.bzl"]),
+)
 
 toolchain_type(name = "toolchain_type")
 
