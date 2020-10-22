@@ -139,7 +139,7 @@ Generates a toolchain-bearing repository that declares the toolchains from some 
 ## rust_repositories
 
 <pre>
-rust_repositories(<a href="#rust_repositories-version">version</a>, <a href="#rust_repositories-iso_date">iso_date</a>, <a href="#rust_repositories-rustfmt_version">rustfmt_version</a>, <a href="#rust_repositories-edition">edition</a>, <a href="#rust_repositories-dev_components">dev_components</a>, <a href="#rust_repositories-sha256s">sha256s</a>)
+rust_repositories(<a href="#rust_repositories-version">version</a>, <a href="#rust_repositories-iso_date">iso_date</a>, <a href="#rust_repositories-rustfmt_version">rustfmt_version</a>, <a href="#rust_repositories-edition">edition</a>, <a href="#rust_repositories-dev_components">dev_components</a>, <a href="#rust_repositories-sha256s">sha256s</a>, <a href="#rust_repositories-use_worker">use_worker</a>)
 </pre>
 
 Emits a default set of toolchains for Linux, OSX, and Freebsd
@@ -158,6 +158,8 @@ This would match for `exec_triple = "x86_64-unknown-linux-gnu"`.  If not specifi
 
 See `load_arbitrary_tool` in `@io_bazel_rules_rust//rust:repositories.bzl` for more details.
 
+The `use_worker` boolean enables [Bazel Persistent Workers] to be used when available. Not all execution platforms have a pre-built binary worker available. In such a case, the rules will fall back to invoking `rustc` directly. Supported platforms:
+- linux-x86_64
 
 **PARAMETERS**
 
@@ -170,6 +172,7 @@ See `load_arbitrary_tool` in `@io_bazel_rules_rust//rust:repositories.bzl` for m
 | <a id="rust_repositories-edition"></a>edition |  The rust edition to be used by default (2015 (default) or 2018)   |  <code>None</code> |
 | <a id="rust_repositories-dev_components"></a>dev_components |  Whether to download the rustc-dev components (defaults to False). Requires version to be "nightly".   |  <code>False</code> |
 | <a id="rust_repositories-sha256s"></a>sha256s |  A dict associating tool subdirectories to sha256 hashes.   |  <code>None</code> |
+| <a id="rust_repositories-use_worker"></a>use_worker |  Set this to True to enable worker.   |  <code>False</code> |
 
 
 <a id="#rust_repository_set"></a>

@@ -69,6 +69,15 @@ Similarly, `rustfmt_version` may also be configured:
 ```python
 rust_repositories(rustfmt_version = "1.4.8")
 ```
+# Using Bazel Persistent Workers
+
+Iterating on Rust code may benefit from [incremental compilation](https://doc.rust-lang.org/edition-guide/rust-2018/the-compiler/incremental-compilation-for-faster-compiles.html). This is supported by using a [Bazel Persistent Worker](https://docs.bazel.build/versions/master/persistent-workers.html). While Bazel can determine what needs to be rebuilt at a crate level, the compiler can speed up building a single crate by sharing information across runs. It does this by storing intermediate information in a directory across invocations. This is enabled by default in Cargo. Persistent workers bring this feature to Bazel.
+
+The Rust rules have preliminary support for workers. Pass `use_worker = True` to enable this when available.
+
+```python
+rust_repositories(use_worker = True)
+```
 
 ## External Dependencies
 
