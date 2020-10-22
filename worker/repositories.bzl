@@ -10,6 +10,7 @@ def rust_worker_repositories():
         urls = ["https://github.com/nikhilm/rustc-worker/releases/download/v0.2.0/rustc-worker-linux_x86_64-static"],
     )
 
+# buildifier: disable=unnamed-macro
 def rust_worker_toolchains():
     """Registers worker toolchains for supported platforms."""
     native.register_toolchains(
