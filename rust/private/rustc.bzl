@@ -17,12 +17,16 @@ load("@bazel_skylib//lib:versions.bzl", "versions")
 load(
     "@bazel_tools//tools/build_defs/cc:action_names.bzl",
     "CPP_LINK_EXECUTABLE_ACTION_NAME",
-    "C_COMPILE_ACTION_NAME",
 )
 load("@bazel_tools//tools/cpp:toolchain_utils.bzl", "find_cpp_toolchain")
-load("@bazel_version//:def.bzl", "BAZEL_VERSION")
-load("@io_bazel_rules_rust//rust:private/legacy_cc_starlark_api_shim.bzl", "get_libs_for_static_executable")
-load("@io_bazel_rules_rust//rust:private/utils.bzl", "get_lib_name", "relativize")
+load("@io_bazel_rules_rust_bazel_version//:def.bzl", "BAZEL_VERSION")
+load(
+    "@io_bazel_rules_rust//rust:private/utils.bzl",
+    "get_lib_name",
+    "get_libs_for_static_executable",
+    "relativize",
+    "rule_attrs",
+)
 
 CrateInfo = provider(
     doc = "A provider containing general Crate information.",
@@ -245,17 +249,6 @@ def get_cc_toolchain(ctx):
     )
     return cc_toolchain, feature_configuration
 
-def get_cc_compile_env(cc_toolchain, feature_configuration):
-    compile_variables = cc_common.create_compile_variables(
-        feature_configuration = feature_configuration,
-        cc_toolchain = cc_toolchain,
-    )
-    return cc_common.get_environment_variables(
-        feature_configuration = feature_configuration,
-        action_name = C_COMPILE_ACTION_NAME,
-        variables = compile_variables,
-    )
-
 def get_cc_user_link_flags(ctx):
     """Get the current target's linkopt flags
 
@@ -310,6 +303,24 @@ def get_linker_and_args(ctx, cc_toolchain, feature_configuration, rpaths):
     )
 
     return ld, link_args, link_env
+
+def _expand_locations(ctx, env, data):
+    """Performs location-macro expansion on string values.
+
+    Note: Only `$(rootpath ...)` is recommended  as `$(execpath ...)` will fail
+    in the case of generated sources.
+
+    Args:
+        ctx (ctx): The rule's context object
+        env (str): The value possibly containing location macros to expand.
+        data (sequence of Targets): The targets which may be referenced by
+            location macros. This is expected to be the `data` attribute of
+            the target, though may have other targets or attributes mixed in.
+
+    Returns:
+        dict: A dict of environment variables with expanded location macros
+    """
+    return dict([(k, ctx.expand_location(v, data)) for (k, v) in env.items()])
 
 def _process_build_scripts(
         ctx,
@@ -401,6 +412,7 @@ def construct_arguments(
         build_env_file,
         build_flags_files,
         maker_path = None,
+        aspect = False,
         use_worker = False):
     """Builds an Args object containing common rustc flags
 
@@ -419,6 +431,7 @@ def construct_arguments(
         build_env_file (str): The output file of a `cargo_build_script` action containing rustc environment variables
         build_flags_files (list): The output files of a `cargo_build_script` actions containing rustc build flags
         maker_path (File): An optional clippy marker file
+        aspect (bool): True if called in an aspect context.
         use_worker (bool): If True, sets up the arguments in a worker-compatible fashion
 
     Returns:
@@ -444,21 +457,24 @@ def construct_arguments(
 
     args.add_all(build_flags_files, before_each = "--arg-file")
 
-    # Certain rust build processes expect to find files from the environment variable
-    # `$CARGO_MANIFEST_DIR`. Examples of this include pest, tera, asakuma.
+    # Certain rust build processes expect to find files from the environment
+    # variable `$CARGO_MANIFEST_DIR`. Examples of this include pest, tera,
+    # asakuma.
     #
-    # The compiler and by extension proc-macros see the current working directory as the Bazel exec
-    # root. Therefore, in order to fix this without an upstream code change, we have to set
-    # `$CARGO_MANIFEST_DIR`.
+    # The compiler and by extension proc-macros see the current working
+    # directory as the Bazel exec root. This is what `$CARGO_MANIFEST_DIR`
+    # would default to but is often the wrong value (e.g. if the source is in a
+    # sub-package or if we are building something in an external repository).
+    # Hence, we need to set `CARGO_MANIFEST_DIR` explicitly.
     #
-    # As such we attempt to infer `$CARGO_MANIFEST_DIR`.
-    # Inference cannot be derived from `attr.crate_root`, as this points at a source file which may or
-    # may not follow the `src/lib.rs` convention. As such we use `ctx.build_file_path` mapped into the
-    # `exec_root`. Since we cannot (seemingly) get the `exec_root` from starlark, we cheat a little
-    # and use `${pwd}` which resolves the `exec_root` at action execution time.
+    # Since we cannot get the `exec_root` from starlark, we cheat a little and
+    # use `${pwd}` which resolves the `exec_root` at action execution time.
     args.add("--subst", "pwd=${pwd}")
 
-    env["CARGO_MANIFEST_DIR"] = "${pwd}/" + ctx.build_file_path[:ctx.build_file_path.rfind("/")]
+    # Both ctx.label.workspace_root and ctx.label.package are relative paths
+    # and either can be empty strings. Avoid trailing/double slashes in the path.
+    components = "${{pwd}}/{}/{}".format(ctx.label.workspace_root, ctx.label.package).split("/")
+    env["CARGO_MANIFEST_DIR"] = "/".join([c for c in components if c])
 
     if out_dir != None:
         env["OUT_DIR"] = "${pwd}/" + out_dir
@@ -546,7 +562,11 @@ def construct_arguments(
                 env["CARGO_BIN_EXE_" + dep_crate_info.output.basename] = dep_crate_info.output.short_path
 
     # Update environment with user provided variables.
-    env.update(crate_info.rustc_env)
+    env.update(_expand_locations(
+        ctx,
+        crate_info.rustc_env,
+        getattr(rule_attrs(ctx, aspect), "data", []),
+    ))
 
     # This empty value satisfies Clippy, which otherwise complains about the
     # sysroot being undefined.
@@ -755,15 +775,10 @@ def _create_extra_input_args(ctx, file, build_info, dep_info):
     if build_info:
         out_dir = build_info.out_dir.path
         build_env_file = build_info.rustc_env.path
-
-        # out_dir will be added as input by the transitive_build_infos loop below.
         build_flags_files.append(build_info.flags.path)
-
-    # This should probably only actually be exposed to actions which link.
-    for dep_build_info in dep_info.transitive_build_infos.to_list():
-        input_files.append(dep_build_info.out_dir)
-        build_flags_files.append(dep_build_info.link_flags.path)
-        input_files.append(dep_build_info.link_flags)
+        build_flags_files.append(build_info.link_flags.path)
+        input_files.append(build_info.out_dir)
+        input_files.append(build_info.link_flags)
 
     return input_files, out_dir, build_env_file, build_flags_files
 
@@ -864,6 +879,6 @@ def _get_dirname(file):
         file (File): The target file
 
     Returns:
-        [str]: Directory name of `file`
+        str: Directory name of `file`
     """
     return file.dirname
