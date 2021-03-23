@@ -653,6 +653,13 @@ _common_attrs = {
         allow_single_file = True,
         cfg = "exec",
     ),
+    "_persistent_worker": attr.label(
+        default = Label("//util/worker"),
+        executable = True,
+        allow_single_file = True,
+        cfg = "exec",
+    ),
+    "_use_worker": attr.label(default = Label("//rust:use-worker")),
 }
 
 _rust_test_attrs = {

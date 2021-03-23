@@ -28,6 +28,7 @@ load(
     "relativize",
     "rule_attrs",
 )
+load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 
 BuildInfo = provider(
     doc = "A provider containing `rustc` build settings for a given Crate.",
@@ -54,6 +55,9 @@ ErrorFormatInfo = provider(
     doc = "Set the --error-format flag for all rustc invocations",
     fields = {"error_format": "(string) [" + ", ".join(_error_format_values) + "]"},
 )
+
+def _use_worker(ctx):
+    return ctx.attr._use_worker[BuildSettingInfo].value
 
 def _get_rustc_env(ctx, toolchain):
     """Gathers rustc environment variables
@@ -355,6 +359,9 @@ def construct_arguments(
 
     # Wrapper args first
     args = ctx.actions.args()
+    if _use_worker(ctx):
+        args.set_param_file_format("multiline")
+        args.use_param_file("@%s", use_always = True)
 
     for build_env_file in build_env_files:
         args.add("--env-file", build_env_file)
@@ -554,8 +561,17 @@ def rustc_compile_action(
     else:
         formatted_version = ""
 
+    executable = ctx.executable._process_wrapper
+    execution_requirements = {}
+    if _use_worker(ctx):
+        executable = ctx.executable._persistent_worker
+        execution_requirements = {
+            "supports-workers": "1",
+            "requires-worker-protocol": "proto"
+        }
+
     ctx.actions.run(
-        executable = ctx.executable._process_wrapper,
+        executable = executable,
         inputs = compile_inputs,
         outputs = [crate_info.output],
         env = env,
@@ -567,6 +583,7 @@ def rustc_compile_action(
             formatted_version,
             len(crate_info.srcs.to_list()),
         ),
+        execution_requirements = execution_requirements,
     )
 
     dylibs = [get_preferred_artifact(lib) for linker_input in dep_info.transitive_noncrates.to_list() for lib in linker_input.libraries if _is_dylib(lib)]

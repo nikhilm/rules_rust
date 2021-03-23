@@ -1,18 +1,18 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 
 cc_binary(
-    name = "process_wrapper",
+    name = "worker",
     srcs = [
-        "process_wrapper.cc",
-        "system.h",
-        "utils.h",
-        "utils.cc",
+        "worker.cc",
+        "//util/process_wrapper:system.h",
+        "//util/process_wrapper:utils.h",
+        "//util/process_wrapper:utils.cc",
     ] + select({
         "@bazel_tools//src/conditions:host_windows": [
-            "system_windows.cc",
+            "//util/process_wrapper:system_windows.cc",
         ],
         "//conditions:default": [
-            "system_posix.cc",
+            "//util/process_wrapper:system_posix.cc",
         ],
     }),
     defines = [] + select({
@@ -24,11 +24,3 @@ cc_binary(
     }),
     visibility = ["//visibility:public"],
 )
-
-exports_files([
-    "utils.h",
-    "utils.cc",
-    "system.h",
-    "system_windows.cc",
-    "system_posix.cc",
-])
