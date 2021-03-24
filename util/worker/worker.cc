@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -27,32 +28,44 @@
 
 // TODO: Library and app split.
 using blaze::worker::WorkRequest;
+using blaze::worker::WorkResponse;
 using google::protobuf::io::CodedInputStream;
+using google::protobuf::io::CodedOutputStream;
 using google::protobuf::io::FileInputStream;
+using google::protobuf::io::FileOutputStream;
 
 using CharType = process_wrapper::System::StrType::value_type;
 
-bool ReadRequest(CodedInputStream *stream, WorkRequest *request)
+bool ReadRequest(CodedInputStream &stream, WorkRequest *request)
 {
   uint32_t req_len;
-  if (!stream->ReadVarint32(&req_len)) {
+  if (!stream.ReadVarint32(&req_len)) {
     std::cerr << "Unable to read message length\n";
     return false;
   }
 
-  CodedInputStream::Limit limit = stream->PushLimit(req_len);
-  if (!request->MergeFromCodedStream(stream)) {
+  CodedInputStream::Limit limit = stream.PushLimit(req_len);
+  if (!request->MergeFromCodedStream(&stream)) {
     std::cerr << "Unable to merge from stream\n";
     return false;
   }
 
-  if (!stream->ConsumedEntireMessage()) {
+  if (!stream.ConsumedEntireMessage()) {
     std::cerr << "Did not consume entire message\n";
     return false;
   }
 
-  stream->PopLimit(limit);
+  stream.PopLimit(limit);
   return true;
+}
+
+std::unique_ptr<WorkResponse> HandleRequest(const WorkRequest &request) {
+    std::unique_ptr<WorkResponse> response(new WorkResponse());
+    // TODO: Fix to correct values.
+    response->set_exit_code(1);
+    response->set_request_id(request.request_id());
+    response->set_output("FAKE ERROR\n");
+    return response;
 }
 
 // Simple process wrapper allowing us to not depend on the shell to run a
@@ -103,17 +116,29 @@ int PW_MAIN(int argc, const CharType* argv[], const CharType* envp[]) {
     return -1;
   }
 
-  CodedInputStream *stream = new CodedInputStream(new FileInputStream(0));
+  std::unique_ptr<CodedInputStream> input(new CodedInputStream(new FileInputStream(0)));
+  // TODO: Figure out ownership.
+  FileOutputStream *out = new FileOutputStream(1);
+  std::unique_ptr<CodedOutputStream> output(new CodedOutputStream(out));
+
   while (true) {
     WorkRequest request;
-    if (!ReadRequest(stream, &request)) {
+    if (!ReadRequest(*input, &request)) {
       return 1;
     }
-    for (int i = 0; i < request.arguments_size(); i++) {
-      std::cerr << request.arguments(i) << " ";
+
+    std::unique_ptr<WorkResponse> response;
+    if ((response = HandleRequest(request)) == nullptr) {
+      return 1;
     }
-    std::cerr << "\n";
-    return 1;
+    uint32_t size = response->ByteSize();
+    output->WriteVarint32(size);
+    response->SerializeWithCachedSizes(output.get());
+    if (output->HadError()) {
+      std::cerr << "Error serializing response\n";
+      return 1;
+    }
+    out->Flush();
   }
 
   // Have the last values added take precedence over the first.
