@@ -659,7 +659,7 @@ _common_attrs = {
         allow_single_file = True,
         cfg = "exec",
     ),
-    "_use_worker": attr.label(default = Label("//rust:use-worker")),
+    "_use_worker": attr.label(default = Label("//rust:experimental-use-worker")),
 }
 
 _rust_test_attrs = {
