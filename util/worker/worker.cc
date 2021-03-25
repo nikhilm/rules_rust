@@ -34,6 +34,8 @@ using google::protobuf::io::CodedOutputStream;
 using google::protobuf::io::FileInputStream;
 using google::protobuf::io::FileOutputStream;
 
+using namespace process_wrapper;
+
 using CharType = process_wrapper::System::StrType::value_type;
 
 bool ReadRequest(CodedInputStream &stream, WorkRequest *request)
@@ -59,21 +61,56 @@ bool ReadRequest(CodedInputStream &stream, WorkRequest *request)
   return true;
 }
 
-std::unique_ptr<WorkResponse> HandleRequest(const WorkRequest &request) {
-    std::unique_ptr<WorkResponse> response(new WorkResponse());
-    // TODO: Fix to correct values.
-    response->set_exit_code(1);
-    response->set_request_id(request.request_id());
-    response->set_output("FAKE ERROR\n");
-    return response;
+std::unique_ptr<WorkResponse> HandleRequest(const WorkRequest &request, const System::StrType& exec_path, const System::EnvironmentBlock& environment_block) {
+  System::StrType stdout_file;
+  System::StrType stderr_file;
+  System::StrType copy_source;
+  System::StrType copy_dest;
+  System::Arguments arguments(request.arguments_size());
+
+  for (int i = 0; i < request.arguments_size(); i++) {
+    // TODO: Probably some way to copy the entire memory into the vector in one go.
+    arguments[i] = request.arguments(i);
+  }
+  // TODO: Add incremental arg.
+
+  int exit_code = System::Exec(exec_path, arguments, environment_block,
+                               stdout_file, stderr_file);
+  if (exit_code == 0) {
+    // we perform a copy of the output if necessary
+    if (!copy_source.empty() && !copy_dest.empty()) {
+      std::ifstream source(copy_source, std::ios::binary);
+      if (source.fail()) {
+        std::cerr << "process wrapper error: failed to open copy source: \""
+                  << ToUtf8(copy_source) << "\"\n";
+        //return -1;
+      }
+      std::ofstream dest(copy_dest, std::ios::binary);
+      if (dest.fail()) {
+        std::cerr << "process wrapper error: failed to open copy dest: \""
+                  << ToUtf8(copy_dest) << "\"\n";
+        //return -1;
+      }
+      dest << source.rdbuf();
+    }
+  } else {
+    std::cerr << "NIKHILM exit " << exit_code << '\n';
+  }
+
+  std::unique_ptr<WorkResponse> response(new WorkResponse());
+  // TODO: Fix to correct values.
+  response->set_exit_code(exit_code);
+  response->set_request_id(request.request_id());
+  response->set_output("FAKE OUTPUT\n");
+  return response;
 }
+
 
 // Simple process wrapper allowing us to not depend on the shell to run a
 // process to perform basic operations like capturing the output or having
 // the $pwd used in command line arguments or environment variables
 int PW_MAIN(int argc, const CharType* argv[], const CharType* envp[]) {
-  using namespace process_wrapper;
-
+  System::StrType exec_path;
   System::EnvironmentBlock environment_block;
   // Taking all environment variables from the current process
   // and sending them down to the child process
@@ -81,20 +118,12 @@ int PW_MAIN(int argc, const CharType* argv[], const CharType* envp[]) {
     environment_block.push_back(envp[i]);
   }
 
-  using Subst = std::pair<System::StrType, System::StrType>;
+  // Have the last values added take precedence over the first.
+  // This is simpler than needing to track duplicates and explicitly override them.
+  std::reverse(environment_block.begin(), environment_block.end());
 
   // This will need support for understanding param file argument.
   // As well as parsing other flags generally.
-
-  System::StrType exec_path;
-  std::vector<Subst> subst_mappings;
-  System::StrType stdout_file;
-  System::StrType stderr_file;
-  System::StrType touch_file;
-  System::StrType copy_source;
-  System::StrType copy_dest;
-  System::Arguments arguments;
-  System::Arguments file_arguments;
 
   bool as_worker = false;
 
@@ -103,7 +132,13 @@ int PW_MAIN(int argc, const CharType* argv[], const CharType* envp[]) {
   for (int i = 1; i < argc; ++i) {
     System::StrType arg = argv[i];
     if (arg == PW_SYS_STR("--persistent_worker")) {
-        as_worker = true;
+      as_worker = true;
+    } else if (arg == PW_SYS_STR("--compiler")) {
+      if (++i == argc) {
+        std::cerr << "--compiler flag missing argument\n";
+        return -1;
+      }
+      exec_path = argv[i];
     } else {
       std::cerr << "worker wrapper error: unknown argument \"" << ToUtf8(arg)
                 << "\"." << '\n';
@@ -128,7 +163,7 @@ int PW_MAIN(int argc, const CharType* argv[], const CharType* envp[]) {
     }
 
     std::unique_ptr<WorkResponse> response;
-    if ((response = HandleRequest(request)) == nullptr) {
+    if ((response = HandleRequest(request, exec_path, environment_block)) == nullptr) {
       return 1;
     }
     uint32_t size = response->ByteSize();
@@ -141,39 +176,4 @@ int PW_MAIN(int argc, const CharType* argv[], const CharType* envp[]) {
     out->Flush();
   }
 
-  // Have the last values added take precedence over the first.
-  // This is simpler than needing to track duplicates and explicitly override them.
-  std::reverse(environment_block.begin(), environment_block.end());
-
-  int exit_code = System::Exec(exec_path, arguments, environment_block,
-                               stdout_file, stderr_file);
-  if (exit_code == 0) {
-    if (!touch_file.empty()) {
-      std::ofstream file(touch_file);
-      if (file.fail()) {
-        std::cerr << "process wrapper error: failed to create touch file: \""
-                  << ToUtf8(touch_file) << "\"\n";
-        return -1;
-      }
-      file.close();
-    }
-
-    // we perform a copy of the output if necessary
-    if (!copy_source.empty() && !copy_dest.empty()) {
-      std::ifstream source(copy_source, std::ios::binary);
-      if (source.fail()) {
-        std::cerr << "process wrapper error: failed to open copy source: \""
-                  << ToUtf8(copy_source) << "\"\n";
-        return -1;
-      }
-      std::ofstream dest(copy_dest, std::ios::binary);
-      if (dest.fail()) {
-        std::cerr << "process wrapper error: failed to open copy dest: \""
-                  << ToUtf8(copy_dest) << "\"\n";
-        return -1;
-      }
-      dest << source.rdbuf();
-    }
-  }
-  return exit_code;
 }

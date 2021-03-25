@@ -562,12 +562,15 @@ def rustc_compile_action(
         formatted_version = ""
 
     executable = ctx.executable._process_wrapper
+    arguments = [args]
     execution_requirements = {}
     if _use_worker(ctx):
+        # Pass the "compiler" to the worker.
+        arguments = ["--compiler", executable.path, args]
         executable = ctx.executable._persistent_worker
         execution_requirements = {
             "supports-workers": "1",
-            "requires-worker-protocol": "proto"
+            "requires-worker-protocol": "proto",
         }
 
     ctx.actions.run(
@@ -575,7 +578,7 @@ def rustc_compile_action(
         inputs = compile_inputs,
         outputs = [crate_info.output],
         env = env,
-        arguments = [args],
+        arguments = arguments,
         mnemonic = "Rustc",
         progress_message = "Compiling Rust {} {}{} ({} files)".format(
             crate_info.type,
