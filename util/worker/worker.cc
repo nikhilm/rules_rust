@@ -16,6 +16,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -73,35 +74,29 @@ std::unique_ptr<WorkResponse> HandleRequest(const WorkRequest &request, const Sy
     arguments[i] = request.arguments(i);
   }
   // TODO: Add incremental arg.
+  //
+
+  // Create a file to write stderr to.
+  std::stringstream fn_stream;
+  fn_stream << System::GetWorkingDirectory() << "/stderr_" << request.request_id() << ".log";
+  stderr_file = fn_stream.str();
 
   int exit_code = System::Exec(exec_path, arguments, environment_block,
                                stdout_file, stderr_file);
-  if (exit_code == 0) {
-    // we perform a copy of the output if necessary
-    if (!copy_source.empty() && !copy_dest.empty()) {
-      std::ifstream source(copy_source, std::ios::binary);
-      if (source.fail()) {
-        std::cerr << "process wrapper error: failed to open copy source: \""
-                  << ToUtf8(copy_source) << "\"\n";
-        //return -1;
-      }
-      std::ofstream dest(copy_dest, std::ios::binary);
-      if (dest.fail()) {
-        std::cerr << "process wrapper error: failed to open copy dest: \""
-                  << ToUtf8(copy_dest) << "\"\n";
-        //return -1;
-      }
-      dest << source.rdbuf();
-    }
+  std::ifstream source(fn_stream.str(), std::ios::binary);
+  std::string stderr_output;
+  if (source.fail()) {
+    stderr_output = "[worker] Error getting stderr\n";
   } else {
-    std::cerr << "NIKHILM exit " << exit_code << '\n';
+    std::stringstream stderr_stream;
+    stderr_stream << source.rdbuf();
+    stderr_output = stderr_stream.str();
   }
 
   std::unique_ptr<WorkResponse> response(new WorkResponse());
-  // TODO: Fix to correct values.
   response->set_exit_code(exit_code);
   response->set_request_id(request.request_id());
-  response->set_output("FAKE OUTPUT\n");
+  response->set_output(stderr_output);
   return response;
 }
 
