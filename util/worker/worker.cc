@@ -88,6 +88,9 @@ std::unique_ptr<WorkResponse> HandleRequest(
   // TODO: Can be shared across requests to avoid concatenation.
   arguments.push_back("incremental=" + System::GetWorkingDirectory() + "/rustc-target-" + compilation_mode + "/incremental");
 
+  std::stringstream fn_stdout_stream;
+  fn_stdout_stream << System::GetWorkingDirectory() << "/stdout_" << request.request_id() << ".log";
+  stdout_file = fn_stdout_stream.str();
   // Create a file to write stderr to.
   std::stringstream fn_stream;
   fn_stream << System::GetWorkingDirectory() << "/stderr_" << request.request_id() << ".log";
@@ -113,9 +116,6 @@ std::unique_ptr<WorkResponse> HandleRequest(
 }
 
 
-// Simple process wrapper allowing us to not depend on the shell to run a
-// process to perform basic operations like capturing the output or having
-// the $pwd used in command line arguments or environment variables
 int PW_MAIN(int argc, const CharType* argv[], const CharType* envp[]) {
   System::StrType exec_path;
   System::StrType compilation_mode;
@@ -168,7 +168,6 @@ int PW_MAIN(int argc, const CharType* argv[], const CharType* envp[]) {
   std::unique_ptr<CodedInputStream> input(new CodedInputStream(new FileInputStream(0)));
   // TODO: Figure out ownership.
   FileOutputStream *out = new FileOutputStream(1);
-  std::unique_ptr<CodedOutputStream> output(new CodedOutputStream(out));
 
   while (true) {
     WorkRequest request;
@@ -176,16 +175,21 @@ int PW_MAIN(int argc, const CharType* argv[], const CharType* envp[]) {
       return 1;
     }
 
+    // TODO: Stack allocate and pass by reference.
     std::unique_ptr<WorkResponse> response;
     if ((response = HandleRequest(request, exec_path, compilation_mode, environment_block)) == nullptr) {
       return 1;
     }
-    uint32_t size = response->ByteSize();
-    output->WriteVarint32(size);
-    response->SerializeWithCachedSizes(output.get());
-    if (output->HadError()) {
-      std::cerr << "Error serializing response\n";
-      return 1;
+    std::cerr << time(nullptr) << " YOWH\n";
+    {
+        uint32_t size = response->ByteSize();
+        CodedOutputStream output(out);
+        output.WriteVarint32(size);
+        response->SerializeWithCachedSizes(&output);
+        if (output.HadError()) {
+          std::cerr << "Error serializing response\n";
+          return 1;
+        }
     }
     out->Flush();
   }
