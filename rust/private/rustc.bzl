@@ -565,8 +565,11 @@ def rustc_compile_action(
     arguments = [args]
     execution_requirements = {}
     if _use_worker(ctx):
-        # Pass the "compiler" to the worker.
-        arguments = ["--compiler", executable.path, args]
+        arguments = [
+            "--compiler", executable.path,
+            "--compilation_mode", ctx.var["COMPILATION_MODE"],
+            args,
+        ]
         executable = ctx.executable._persistent_worker
         execution_requirements = {
             "supports-workers": "1",

@@ -62,7 +62,12 @@ bool ReadRequest(CodedInputStream &stream, WorkRequest *request)
   return true;
 }
 
-std::unique_ptr<WorkResponse> HandleRequest(const WorkRequest &request, const System::StrType& exec_path, const System::EnvironmentBlock& environment_block) {
+std::unique_ptr<WorkResponse> HandleRequest(
+  const WorkRequest &request,
+  const System::StrType& exec_path,
+  const System::StrType& compilation_mode,
+  const System::EnvironmentBlock& environment_block
+) {
   System::StrType stdout_file;
   System::StrType stderr_file;
   System::StrType copy_source;
@@ -73,8 +78,15 @@ std::unique_ptr<WorkResponse> HandleRequest(const WorkRequest &request, const Sy
     // TODO: Probably some way to copy the entire memory into the vector in one go.
     arguments[i] = request.arguments(i);
   }
-  // TODO: Add incremental arg.
-  //
+
+  // Considering
+  // https://github.com/rust-lang/rust/blob/673d0db5e393e9c64897005b470bfeb6d5aec61b/compiler/rustc_incremental/src/persist/fs.rs#L145
+  // as the canonical description of how incremental compilation is affected by
+  // the choice of directory, it helps to segment based on compilation mode.
+
+  arguments.push_back("--codegen");
+  // TODO: Can be shared across requests to avoid concatenation.
+  arguments.push_back("incremental=" + System::GetWorkingDirectory() + "/rustc-target-" + compilation_mode + "/incremental");
 
   // Create a file to write stderr to.
   std::stringstream fn_stream;
@@ -106,6 +118,7 @@ std::unique_ptr<WorkResponse> HandleRequest(const WorkRequest &request, const Sy
 // the $pwd used in command line arguments or environment variables
 int PW_MAIN(int argc, const CharType* argv[], const CharType* envp[]) {
   System::StrType exec_path;
+  System::StrType compilation_mode;
   System::EnvironmentBlock environment_block;
   // Taking all environment variables from the current process
   // and sending them down to the child process
@@ -128,6 +141,12 @@ int PW_MAIN(int argc, const CharType* argv[], const CharType* envp[]) {
     System::StrType arg = argv[i];
     if (arg == PW_SYS_STR("--persistent_worker")) {
       as_worker = true;
+    } else if (arg == PW_SYS_STR("--compilation_mode")) {
+      if (++i == argc) {
+        std::cerr << "--compilation_mode flag missing argument\n";
+        return -1;
+      }
+      compilation_mode = argv[i];
     } else if (arg == PW_SYS_STR("--compiler")) {
       if (++i == argc) {
         std::cerr << "--compiler flag missing argument\n";
@@ -158,7 +177,7 @@ int PW_MAIN(int argc, const CharType* argv[], const CharType* envp[]) {
     }
 
     std::unique_ptr<WorkResponse> response;
-    if ((response = HandleRequest(request, exec_path, environment_block)) == nullptr) {
+    if ((response = HandleRequest(request, exec_path, compilation_mode, environment_block)) == nullptr) {
       return 1;
     }
     uint32_t size = response->ByteSize();
