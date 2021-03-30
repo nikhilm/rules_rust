@@ -27,7 +27,6 @@
 #include "util/process_wrapper/utils.h"
 #include "util/worker/worker_protocol.pb.h"
 
-// TODO: Library and app split.
 using blaze::worker::WorkRequest;
 using blaze::worker::WorkResponse;
 using google::protobuf::io::CodedInputStream;
@@ -37,18 +36,17 @@ using google::protobuf::io::FileOutputStream;
 
 using namespace process_wrapper;
 
-using CharType = process_wrapper::System::StrType::value_type;
-
-bool ReadRequest(CodedInputStream &stream, WorkRequest *request)
+bool ReadRequest(FileInputStream *input, WorkRequest &request)
 {
   uint32_t req_len;
+  CodedInputStream stream(input);
   if (!stream.ReadVarint32(&req_len)) {
     std::cerr << "Unable to read message length\n";
     return false;
   }
 
   CodedInputStream::Limit limit = stream.PushLimit(req_len);
-  if (!request->MergeFromCodedStream(&stream)) {
+  if (!request.MergeFromCodedStream(&stream)) {
     std::cerr << "Unable to merge from stream\n";
     return false;
   }
@@ -62,43 +60,38 @@ bool ReadRequest(CodedInputStream &stream, WorkRequest *request)
   return true;
 }
 
-std::unique_ptr<WorkResponse> HandleRequest(
+bool HandleRequest(
   const WorkRequest &request,
+  WorkResponse &response,
   const System::StrType& exec_path,
   const System::StrType& compilation_mode,
   const System::EnvironmentBlock& environment_block
 ) {
-  System::StrType stdout_file;
-  System::StrType stderr_file;
-  System::StrType copy_source;
-  System::StrType copy_dest;
-  System::Arguments arguments(request.arguments_size());
+  System::Arguments arguments;
+  // Pre-allocate. +2 for the incremental argument.
+  arguments.reserve(request.arguments_size() + 2);
 
+  auto request_args = request.arguments();
   for (int i = 0; i < request.arguments_size(); i++) {
-    // TODO: Probably some way to copy the entire memory into the vector in one go.
-    arguments[i] = request.arguments(i);
+      arguments.push_back(request.arguments(i));
   }
 
   // Considering
   // https://github.com/rust-lang/rust/blob/673d0db5e393e9c64897005b470bfeb6d5aec61b/compiler/rustc_incremental/src/persist/fs.rs#L145
   // as the canonical description of how incremental compilation is affected by
   // the choice of directory, it helps to segment based on compilation mode.
-
+  // That prevents the GC phase from clearing the cache of a debug build when running an opt build.
   arguments.push_back("--codegen");
   // TODO: Can be shared across requests to avoid concatenation.
   arguments.push_back("incremental=" + System::GetWorkingDirectory() + "/rustc-target-" + compilation_mode + "/incremental");
 
-  std::stringstream fn_stdout_stream;
-  fn_stdout_stream << System::GetWorkingDirectory() << "/stdout_" << request.request_id() << ".log";
-  stdout_file = fn_stdout_stream.str();
-  // Create a file to write stderr to.
-  std::stringstream fn_stream;
-  fn_stream << System::GetWorkingDirectory() << "/stderr_" << request.request_id() << ".log";
-  stderr_file = fn_stream.str();
+  // Since the worker is not multiplexed, we can always log to the same file and overwrite on the next request.
+  System::StrType stdout_file = System::GetWorkingDirectory() + "/stdout.log";
+  System::StrType stderr_file = System::GetWorkingDirectory() + "/stderr.log";
 
   int exit_code = System::Exec(exec_path, arguments, environment_block,
                                stdout_file, stderr_file);
-  std::ifstream source(fn_stream.str(), std::ios::binary);
+  std::ifstream source(stderr_file, std::ios::binary);
   std::string stderr_output;
   if (source.fail()) {
     stderr_output = "[worker] Error getting stderr\n";
@@ -108,13 +101,14 @@ std::unique_ptr<WorkResponse> HandleRequest(
     stderr_output = stderr_stream.str();
   }
 
-  std::unique_ptr<WorkResponse> response(new WorkResponse());
-  response->set_exit_code(exit_code);
-  response->set_request_id(request.request_id());
-  response->set_output(stderr_output);
-  return response;
+  response.set_exit_code(exit_code);
+  response.set_request_id(request.request_id());
+  response.set_output(std::move(stderr_output));
+  return true;
 }
 
+
+using CharType = process_wrapper::System::StrType::value_type;
 
 int PW_MAIN(int argc, const CharType* argv[], const CharType* envp[]) {
   System::StrType exec_path;
@@ -165,33 +159,32 @@ int PW_MAIN(int argc, const CharType* argv[], const CharType* envp[]) {
     return -1;
   }
 
-  std::unique_ptr<CodedInputStream> input(new CodedInputStream(new FileInputStream(0)));
-  // TODO: Figure out ownership.
-  FileOutputStream *out = new FileOutputStream(1);
+  std::unique_ptr<FileInputStream> input(new FileInputStream(0));
+  std::unique_ptr<FileOutputStream> output(new FileOutputStream(1));
 
   while (true) {
     WorkRequest request;
-    if (!ReadRequest(*input, &request)) {
+    if (!ReadRequest(input.get(), request)) {
       return 1;
     }
 
-    // TODO: Stack allocate and pass by reference.
-    std::unique_ptr<WorkResponse> response;
-    if ((response = HandleRequest(request, exec_path, compilation_mode, environment_block)) == nullptr) {
+    WorkResponse response;
+    if (!HandleRequest(request, response, exec_path, compilation_mode, environment_block)) {
       return 1;
     }
-    std::cerr << time(nullptr) << " YOWH\n";
+
+    // A CodedInputStream will try to move around the underlying buffer when destroyed.
+    // If we Flush stdout, that fails. So ensure it goes out of scope before we flush.
     {
-        uint32_t size = response->ByteSize();
-        CodedOutputStream output(out);
-        output.WriteVarint32(size);
-        response->SerializeWithCachedSizes(&output);
-        if (output.HadError()) {
+        CodedOutputStream coded_out(output.get());
+        coded_out.WriteVarint32(response.ByteSize());
+        response.SerializeWithCachedSizes(&coded_out);
+        if (coded_out.HadError()) {
           std::cerr << "Error serializing response\n";
           return 1;
         }
     }
-    out->Flush();
+    output->Flush();
   }
-
+  return 0;
 }
