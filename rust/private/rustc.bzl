@@ -562,9 +562,11 @@ def rustc_compile_action(
         formatted_version = ""
 
     executable = ctx.executable._process_wrapper
+    tools = []
     arguments = [args]
     execution_requirements = {}
     if _use_worker(ctx):
+        tools = [executable]
         arguments = [
             "--compiler", executable.path,
             "--compilation_mode", ctx.var["COMPILATION_MODE"],
@@ -581,6 +583,7 @@ def rustc_compile_action(
         inputs = compile_inputs,
         outputs = [crate_info.output],
         env = env,
+        tools = tools,
         arguments = arguments,
         mnemonic = "Rustc",
         progress_message = "Compiling Rust {} {}{} ({} files)".format(
