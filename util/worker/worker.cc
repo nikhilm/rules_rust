@@ -113,6 +113,41 @@ bool HandleRequest(
   return true;
 }
 
+int RunAsWorker(
+  const System::StrType& exec_path,
+  const System::StrType& compilation_mode,
+  const System::EnvironmentBlock& environment_block
+) {
+  std::unique_ptr<FileInputStream> input(new FileInputStream(0));
+  std::unique_ptr<FileOutputStream> output(new FileOutputStream(1));
+
+  while (true) {
+    WorkRequest request;
+    if (!ReadRequest(input.get(), request)) {
+      return 1;
+    }
+
+    WorkResponse response;
+    if (!HandleRequest(request, response, exec_path, compilation_mode, environment_block)) {
+      return 1;
+    }
+
+    // A CodedInputStream will try to move around the underlying buffer when destroyed.
+    // If we Flush stdout, that fails. So ensure it goes out of scope before we flush.
+    {
+        CodedOutputStream coded_out(output.get());
+        coded_out.WriteVarint32(response.ByteSize());
+        response.SerializeWithCachedSizes(&coded_out);
+        if (coded_out.HadError()) {
+          std::cerr << "Error serializing response\n";
+          return 1;
+        }
+    }
+    output->Flush();
+  }
+
+  return 0;
+}
 
 using CharType = process_wrapper::System::StrType::value_type;
 
@@ -160,37 +195,9 @@ int PW_MAIN(int argc, const CharType* argv[], const CharType* envp[]) {
     }
   }
 
-  if (!as_worker) {
-    std::cerr << "Don't know how to run as non-worker yet\n";
-    return -1;
+  if (as_worker) {
+      return RunAsWorker(exec_path, compilation_mode, environment_block);
   }
-
-  std::unique_ptr<FileInputStream> input(new FileInputStream(0));
-  std::unique_ptr<FileOutputStream> output(new FileOutputStream(1));
-
-  while (true) {
-    WorkRequest request;
-    if (!ReadRequest(input.get(), request)) {
-      return 1;
-    }
-
-    WorkResponse response;
-    if (!HandleRequest(request, response, exec_path, compilation_mode, environment_block)) {
-      return 1;
-    }
-
-    // A CodedInputStream will try to move around the underlying buffer when destroyed.
-    // If we Flush stdout, that fails. So ensure it goes out of scope before we flush.
-    {
-        CodedOutputStream coded_out(output.get());
-        coded_out.WriteVarint32(response.ByteSize());
-        response.SerializeWithCachedSizes(&coded_out);
-        if (coded_out.HadError()) {
-          std::cerr << "Error serializing response\n";
-          return 1;
-        }
-    }
-    output->Flush();
-  }
-  return 0;
+  std::cerr << "Don't know how to run as non-worker yet\n";
+  return -1;
 }
