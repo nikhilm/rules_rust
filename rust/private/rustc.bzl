@@ -13,6 +13,7 @@
 # limitations under the License.
 
 # buildifier: disable=module-docstring
+load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(
     "@bazel_tools//tools/build_defs/cc:action_names.bzl",
     "CPP_LINK_EXECUTABLE_ACTION_NAME",
@@ -28,7 +29,6 @@ load(
     "relativize",
     "rule_attrs",
 )
-load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 
 BuildInfo = provider(
     doc = "A provider containing `rustc` build settings for a given Crate.",
@@ -574,8 +574,8 @@ def rustc_compile_action(
         ]
         executable = ctx.executable._persistent_worker
         execution_requirements = {
-            "supports-workers": "1",
             "requires-worker-protocol": "proto",
+            "supports-workers": "1",
         }
 
     ctx.actions.run(
