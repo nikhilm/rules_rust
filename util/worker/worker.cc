@@ -74,12 +74,12 @@ bool HandleRequest(
   auto request_args = request.arguments();
   std::string target;
   for (int i = 0; i < request.arguments_size(); i++) {
-      auto argument = request.arguments(i);
-      // Starts with
-      if (argument.rfind("--target=", 0) != std::string::npos) {
-          target = argument.substr(9) + '/';
-      }
-      arguments.push_back(argument);
+    auto argument = request.arguments(i);
+    // Starts with
+    if (argument.rfind("--target=", 0) != std::string::npos) {
+      target = argument.substr(9) + '/';
+    }
+    arguments.push_back(argument);
   }
 
   // Considering
@@ -135,13 +135,13 @@ int RunAsWorker(
     // A CodedInputStream will try to move around the underlying buffer when destroyed.
     // If we Flush stdout, that fails. So ensure it goes out of scope before we flush.
     {
-        CodedOutputStream coded_out(output.get());
-        coded_out.WriteVarint32(response.ByteSize());
-        response.SerializeWithCachedSizes(&coded_out);
-        if (coded_out.HadError()) {
-          std::cerr << "Error serializing response\n";
-          return 1;
-        }
+      CodedOutputStream coded_out(output.get());
+      coded_out.WriteVarint32(response.ByteSize());
+      response.SerializeWithCachedSizes(&coded_out);
+      if (coded_out.HadError()) {
+        std::cerr << "Error serializing response\n";
+        return 1;
+      }
     }
     output->Flush();
   }
@@ -165,7 +165,7 @@ int RunStandalone(
   std::ifstream source(param_file);
   std::string line;
   while (std::getline(source, line)) {
-      arguments.push_back(line);
+    arguments.push_back(line);
   }
 
   std::string empty;
