@@ -149,11 +149,36 @@ int RunAsWorker(
   return 0;
 }
 
+int RunStandalone(
+  const System::StrType& exec_path,
+  const System::EnvironmentBlock& environment_block,
+  const System::StrType& param_file_param
+) {
+  if (param_file_param[0] != '@') {
+    std::cerr << "Param file must start with '@', got \"" << param_file_param << "\"\n";
+    return -1;
+  }
+
+  std::string param_file = ToUtf8(param_file_param).substr(1);
+  System::Arguments arguments;
+
+  std::ifstream source(param_file);
+  std::string line;
+  while (std::getline(source, line)) {
+      arguments.push_back(line);
+  }
+
+  std::string empty;
+
+  return System::Exec(exec_path, arguments, environment_block, empty, empty);
+}
+
 using CharType = process_wrapper::System::StrType::value_type;
 
 int PW_MAIN(int argc, const CharType* argv[], const CharType* envp[]) {
   System::StrType exec_path;
   System::StrType compilation_mode;
+  System::StrType param_file;
   System::EnvironmentBlock environment_block;
   // Taking all environment variables from the current process
   // and sending them down to the child process
@@ -188,6 +213,8 @@ int PW_MAIN(int argc, const CharType* argv[], const CharType* envp[]) {
         return -1;
       }
       exec_path = argv[i];
+    } else if (arg[0] == '@') {
+      param_file = arg;
     } else {
       std::cerr << "worker wrapper error: unknown argument \"" << ToUtf8(arg)
                 << "\"." << '\n';
@@ -196,8 +223,12 @@ int PW_MAIN(int argc, const CharType* argv[], const CharType* envp[]) {
   }
 
   if (as_worker) {
-      return RunAsWorker(exec_path, compilation_mode, environment_block);
+    if (!param_file.empty()) {
+      std::cerr << "Param file argument \"" << param_file << "\" not supported in worker mode\n";
+      return -1;
+    }
+    return RunAsWorker(exec_path, compilation_mode, environment_block);
+  } else {
+    return RunStandalone(exec_path, environment_block, param_file);
   }
-  std::cerr << "Don't know how to run as non-worker yet\n";
-  return -1;
 }
