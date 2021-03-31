@@ -72,8 +72,14 @@ bool HandleRequest(
   arguments.reserve(request.arguments_size() + 2);
 
   auto request_args = request.arguments();
+  std::string target;
   for (int i = 0; i < request.arguments_size(); i++) {
-      arguments.push_back(request.arguments(i));
+      auto argument = request.arguments(i);
+      // Starts with
+      if (argument.rfind("--target=", 0) != std::string::npos) {
+          target = argument.substr(9) + '/';
+      }
+      arguments.push_back(argument);
   }
 
   // Considering
@@ -83,7 +89,7 @@ bool HandleRequest(
   // That prevents the GC phase from clearing the cache of a debug build when running an opt build.
   arguments.push_back("--codegen");
   // TODO: Can be shared across requests to avoid concatenation.
-  arguments.push_back("incremental=" + System::GetWorkingDirectory() + "/rustc-target-" + compilation_mode + "/incremental");
+  arguments.push_back("incremental=" + System::GetWorkingDirectory() + "/rustc-target/" + target + compilation_mode + "/incremental");
 
   // Since the worker is not multiplexed, we can always log to the same file and overwrite on the next request.
   System::StrType stdout_file = System::GetWorkingDirectory() + "/stdout.log";
