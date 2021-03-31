@@ -57,7 +57,7 @@ ErrorFormatInfo = provider(
 )
 
 def _use_worker(ctx):
-    return ctx.attr._use_worker[BuildSettingInfo].value
+    return hasattr(ctx.attr, "_use_worker") and ctx.attr._use_worker[BuildSettingInfo].value
 
 def _get_rustc_env(ctx, toolchain):
     """Gathers rustc environment variables
